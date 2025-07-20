@@ -1,104 +1,99 @@
 from __future__ import division
 from keras.models import Model
-from keras.layers.core import Dropout, Activation
-from keras.layers import Input, merge
-from keras.layers.convolutional import Convolution2D, MaxPooling2D
+from keras.layers import Dropout, Activation, Input, Concatenate
+from keras.layers import Conv2D, MaxPooling2D
 from keras.regularizers import l2
+from keras.applications import VGG16
 import keras.backend as K
-import h5py
-from eltwise_product import EltWiseProduct  # custom layer for spatial biasing
-from config import *  # contains img dimensions and shape info
+import math
+
+from eltwise_product import EltWiseProduct
+from config import *
 
 
-# Utility function to extract weights from VGG16 HDF5 file
-def get_weights_vgg16(f, id):
-    g = f['layer_{}'.format(id)]
-    return [g['param_{}'.format(p)] for p in range(g.attrs['nb_params'])]
-
-
-# Main model definition function
 def ml_net_model(img_rows=480, img_cols=640, downsampling_factor_net=8, downsampling_factor_product=10):
-    # Load pretrained VGG16 weights
-    f = h5py.File("vgg16_weights.h5")
+    """
+    Builds the ML-Net model with a pretrained VGG16 backbone and custom prior learning layer.
+    
+    Args:
+        img_rows (int): Input image height.
+        img_cols (int): Input image width.
+        downsampling_factor_net (int): Downsampling factor in feature extractor (VGG16).
+        downsampling_factor_product (int): Downsampling factor in prior learning layer.
 
-    # Input shape: (channels=3, height, width)
-    input_ml_net = Input(shape=(3, img_rows, img_cols))
+    Returns:
+        Keras Model: ML-Net saliency prediction model.
+    """
+    # Input tensor with shape (height, width, channels)
+    input_ml_net = Input(shape=(img_rows, img_cols, 3))
 
-    #########################################################
-    # VGG-16 BASE (Feature Extraction Layers)
-    #########################################################
-    weights = get_weights_vgg16(f, 1)
-    conv1_1 = Convolution2D(64, 3, 3, weights=weights, activation='relu', border_mode='same')(input_ml_net)
-    weights = get_weights_vgg16(f, 3)
-    conv1_2 = Convolution2D(64, 3, 3, weights=weights, activation='relu', border_mode='same')(conv1_1)
-    conv1_pool = MaxPooling2D((2, 2), strides=(2, 2), border_mode='same')(conv1_2)
+    # Load VGG16 pretrained on ImageNet without top fully connected layers
+    base_model = VGG16(include_top=False, weights='imagenet', input_tensor=input_ml_net)
 
-    weights = get_weights_vgg16(f, 6)
-    conv2_1 = Convolution2D(128, 3, 3, weights=weights, activation='relu', border_mode='same')(conv1_pool)
-    weights = get_weights_vgg16(f, 8)
-    conv2_2 = Convolution2D(128, 3, 3, weights=weights, activation='relu', border_mode='same')(conv2_1)
-    conv2_pool = MaxPooling2D((2, 2), strides=(2, 2), border_mode='same')(conv2_2)
+    # Extract outputs of intermediate conv and pooling layers for multi-scale feature combination
+    conv1_2 = base_model.get_layer('block1_conv2').output
+    conv1_pool = base_model.get_layer('block1_pool').output
+    conv2_2 = base_model.get_layer('block2_conv2').output
+    conv2_pool = base_model.get_layer('block2_pool').output
+    conv3_3 = base_model.get_layer('block3_conv3').output
+    conv3_pool = base_model.get_layer('block3_pool').output
+    conv4_3 = base_model.get_layer('block4_conv3').output
+    conv4_pool = base_model.get_layer('block4_pool').output
+    conv5_3 = base_model.get_layer('block5_conv3').output
 
-    weights = get_weights_vgg16(f, 11)
-    conv3_1 = Convolution2D(256, 3, 3, weights=weights, activation='relu', border_mode='same')(conv2_pool)
-    weights = get_weights_vgg16(f, 13)
-    conv3_2 = Convolution2D(256, 3, 3, weights=weights, activation='relu', border_mode='same')(conv3_1)
-    weights = get_weights_vgg16(f, 15)
-    conv3_3 = Convolution2D(256, 3, 3, weights=weights, activation='relu', border_mode='same')(conv3_2)
-    conv3_pool = MaxPooling2D((2, 2), strides=(2, 2), border_mode='same')(conv3_3)
+    # Modify last pooling layer (block4_pool) to have stride=1 to match original paper's architecture
+    conv4_pool = MaxPooling2D(pool_size=(2, 2), strides=(1, 1), padding='same')(conv4_3)
 
-    weights = get_weights_vgg16(f, 18)
-    conv4_1 = Convolution2D(512, 3, 3, weights=weights, activation='relu', border_mode='same')(conv3_pool)
-    weights = get_weights_vgg16(f, 20)
-    conv4_2 = Convolution2D(512, 3, 3, weights=weights, activation='relu', border_mode='same')(conv4_1)
-    weights = get_weights_vgg16(f, 22)
-    conv4_3 = Convolution2D(512, 3, 3, weights=weights, activation='relu', border_mode='same')(conv4_2)
-    conv4_pool = MaxPooling2D((2, 2), strides=(1, 1), border_mode='same')(conv4_3)
+    # Concatenate multi-scale feature maps from conv3_pool, conv4_pool, and conv5_3 layers
+    concatenated = Concatenate(axis=-1)([conv3_pool, conv4_pool, conv5_3])
 
-    weights = get_weights_vgg16(f, 25)
-    conv5_1 = Convolution2D(512, 3, 3, weights=weights, activation='relu', border_mode='same')(conv4_pool)
-    weights = get_weights_vgg16(f, 27)
-    conv5_2 = Convolution2D(512, 3, 3, weights=weights, activation='relu', border_mode='same')(conv5_1)
-    weights = get_weights_vgg16(f, 29)
-    conv5_3 = Convolution2D(512, 3, 3, weights=weights, activation='relu', border_mode='same')(conv5_2)
-
-    #########################################################
-    # ENCODER NETWORK (Combines Deep Features)
-    #########################################################
-    # Concatenate outputs from different stages of the network
-    concatenated = merge([conv3_pool, conv4_pool, conv5_3], mode='concat', concat_axis=1)
+    # Apply dropout for regularization
     dropout = Dropout(0.5)(concatenated)
 
-    # Reduce dimensions, act like encoder bottleneck
-    int_conv = Convolution2D(64, 3, 3, init='glorot_normal', activation='relu', border_mode='same')(dropout)
-    pre_final_conv = Convolution2D(1, 1, 1, init='glorot_normal', activation='relu')(int_conv)
+    # Intermediate convolution to reduce dimensionality and learn encoding
+    int_conv = Conv2D(64, (3, 3), padding='same', activation='relu', kernel_initializer='glorot_normal')(dropout)
 
-    #########################################################
-    # PRIOR MAP LEARNING (bias map that helps focus spatial attention)
-    #########################################################
+    # Final 1x1 convolution to produce single-channel saliency map
+    pre_final_conv = Conv2D(1, (1, 1), activation='relu', kernel_initializer='glorot_normal')(int_conv)
+
+    # Calculate prior learning weights size based on downsampling factors
     rows_elt = math.ceil(img_rows / downsampling_factor_net) // downsampling_factor_product
     cols_elt = math.ceil(img_cols / downsampling_factor_net) // downsampling_factor_product
 
-    # Learnable spatial weighting (usually to bias center)
-    eltprod = EltWiseProduct(init='zero', W_regularizer=l2(1/(rows_elt*cols_elt)))(pre_final_conv)
+    # Custom prior learning layer with L2 regularization, initialized to zeros
+    eltprod = EltWiseProduct(kernel_initializer='zeros', kernel_regularizer=l2(1 / (rows_elt * cols_elt)))(pre_final_conv)
+
+    # Apply ReLU activation to final output
     output_ml_net = Activation('relu')(eltprod)
 
-    # Build the model
-    model = Model(input=[input_ml_net], output=[output_ml_net])
+    # Define the model with inputs and outputs
+    model = Model(inputs=input_ml_net, outputs=output_ml_net)
 
-    # Print layer dimensions for debugging
+    # Print input/output shapes of layers (ignore layers without shape info)
     for layer in model.layers:
-        print(layer.input_shape, layer.output_shape)
+        try:
+            print(layer.input_shape, layer.output_shape)
+        except Exception:
+            continue
 
     return model
 
 
-# Custom loss function to compare normalized saliency prediction vs. GT
 def loss(y_true, y_pred):
-    max_y = K.repeat_elements(
-        K.expand_dims(
-            K.repeat_elements(K.expand_dims(K.max(K.max(y_pred, axis=2), axis=2)), shape_r_gt, axis=-1)
-        ),
-        shape_c_gt, axis=-1
-    )
+    """
+    Custom loss function that normalizes predictions and calculates weighted MSE.
+    
+    Args:
+        y_true: Ground truth saliency maps.
+        y_pred: Predicted saliency maps.
+    
+    Returns:
+        Tensor: Computed loss value.
+    """
+    # Find max prediction per example for normalization
+    max_y = K.max(K.max(y_pred, axis=1, keepdims=True), axis=2, keepdims=True)
+    max_y = K.repeat_elements(max_y, shape_r_gt, axis=1)
+    max_y = K.repeat_elements(max_y, shape_c_gt, axis=2)
+    
+    # Weighted mean squared error loss, prioritizing low saliency regions
     return K.mean(K.square((y_pred / max_y) - y_true) / (1 - y_true + 0.1))

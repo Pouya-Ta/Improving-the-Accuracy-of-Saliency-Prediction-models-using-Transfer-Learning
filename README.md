@@ -75,7 +75,7 @@ Model weights will be saved during training and loaded for testing.
 * Mahsa
 * Niloofar
 * Mohammad Hossein
-* Amitis
+* Amitis Mirabedini, Email: mirabediniamitis@gmail.com
 
 ## Supervisors
 

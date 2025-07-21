@@ -28,7 +28,7 @@ By comparing these two settings, we aim to measure the effect of transfer learni
 ## Installation and Setup
 - Requires Python 3.x with TensorFlow/Keras and necessary dependencies.
 - Supports training and testing on GPUs (recommended).
-- Download dataset from [Google Drive](https://drive.google.com/file/d/1feL-qmsgDWtctopQJ9Injmp0Se5OvmyP/view).
+- Download dataset from [Google Drive](https://drive.google.com/drive/folders/1FUFiysRjSVP4344WVPmzvDDYtAKCCqNt?usp=drive_link).
 - Follow usage instructions in `main.py` to train or predict saliency maps.
 
 ## Usage

@@ -1,3 +1,4 @@
+# NOTE: This file is not used when loading preprocessed .npy files.
 from __future__ import division
 import cv2
 import numpy as np

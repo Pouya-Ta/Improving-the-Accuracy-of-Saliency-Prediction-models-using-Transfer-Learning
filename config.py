@@ -24,10 +24,10 @@ imgs_train_path = '/path/to/training/images/'
 # path of training maps
 maps_train_path = '/path/to/training/maps/'
 # number of training images
-nb_imgs_train = 10000
+nb_imgs_train = 700
 # path of validation images
 imgs_val_path = '/path/to/validation/images/'
 # path of validation maps
 maps_val_path = '/path/to/validation/maps/'
 # number of validation images
-nb_imgs_val = 5000
+nb_imgs_val = 150

@@ -1,11 +1,10 @@
-# model.py
-from __future__ import division
-from keras.models import Model
-from keras.layers import Dropout, Activation, Input, Concatenate, Conv2D, MaxPooling2D
-from keras.regularizers import l2
-from keras.applications import VGG16
-import keras.backend as K
 import math
+import tensorflow as tf
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Dropout, Activation, Input, Concatenate, Conv2D, MaxPooling2D
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.applications import VGG16
+import tensorflow.keras.backend as K
 
 from eltwise_product import EltWiseProduct
 from config import *
@@ -46,4 +45,5 @@ def loss(y_true, y_pred):
     max_y = K.max(K.max(y_pred, axis=1, keepdims=True), axis=2, keepdims=True)
     max_y = K.repeat_elements(max_y, shape_r_gt, axis=1)
     max_y = K.repeat_elements(max_y, shape_c_gt, axis=2)
+    return K.mean(K.square((y_pred / max_y) - y_true) / (1 - y_true + 0.1))
     return K.mean(K.square((y_pred / max_y) - y_true) / (1 - y_true + 0.1))

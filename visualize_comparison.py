@@ -3,13 +3,19 @@ import cv2
 import numpy as np
 from model import ml_net_model
 import config
-def load_and_preprocess(path, target_size=(480, 640)):
-    img = cv2.imread(path)
-    img = cv2.resize(img, target_size)
-    return img / 255.0
+import os
+
+def load_input(path):
+    if path.endswith('.npy'):
+        return np.load(path)
+    else:
+        img = cv2.imread(path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (config.shape_c, config.shape_r))
+        return img.astype(np.float32)
 
 def compare_saliency(image_path):
-    image = load_and_preprocess(image_path)
+    image = load_input(image_path)
     image_batch = np.expand_dims(image, axis=0)
 
     # Load both models
@@ -28,7 +34,7 @@ def compare_saliency(image_path):
 
     # Plot
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    axes[0].imshow(image)
+    axes[0].imshow(image.astype(np.uint8))
     axes[0].set_title("Input Image")
     axes[1].imshow(pred_frozen, cmap='hot')
     axes[1].set_title("Saliency (VGG Frozen)")
@@ -41,4 +47,5 @@ def compare_saliency(image_path):
 
 
 # Example usage
+compare_saliency("path/to/test/image.npy")
 compare_saliency("path/to/test/image.jpg")

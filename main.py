@@ -1,5 +1,5 @@
-from keras.optimizers import SGD
-from keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 import os, cv2, sys
 import numpy as np
 from config import *
@@ -32,12 +32,16 @@ def generator(b_s, phase_gen='train'):
 
     images.sort()
     maps.sort()
+    target_size = (28, 28)  # Resize target for saliency maps
 
     counter = 0
     while True:
         batch_images = [np.load(f) for f in images[counter:counter + b_s]]
-        batch_maps = [np.load(f) for f in maps[counter:counter + b_s]]
-        yield np.stack(batch_images), np.stack(batch_maps)
+        batch_maps = [
+            cv2.resize(np.load(f), target_size, interpolation=cv2.INTER_AREA)
+            for f in maps[counter:counter + b_s]
+        ]
+        yield np.stack(batch_images), np.expand_dims(np.stack(batch_maps), axis=-1)
         counter = (counter + b_s) % len(images)
 
 
@@ -87,8 +91,8 @@ if __name__ == '__main__':
             validation_data=generator(b_s=b_s, phase_gen='val'),
             validation_steps=nb_imgs_val // b_s,
             callbacks=[
-                EarlyStopping(patience=5),
-                ModelCheckpoint('mlnet_best.h5', save_best_only=True, monitor='val_loss')
+                EarlyStopping(patience=10),
+                ModelCheckpoint('weights/frozen/mlnet.h5', save_best_only=True, monitor='val_loss')
             ]
         )
 

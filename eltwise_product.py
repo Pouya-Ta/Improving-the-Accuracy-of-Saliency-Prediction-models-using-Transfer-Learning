@@ -35,39 +35,31 @@ class EltWiseProduct(Layer):
         super(EltWiseProduct, self).__init__(**kwargs)
 
     def build(self, input_shape):
-        """
-        Build the layer: create the trainable weights.
-        """
-        assert len(input_shape) == 2
-        self.input_spec = [InputSpec(shape=input_shape[0]), InputSpec(shape=input_shape[1])]
-
-        # Initialize the weights matrix
-        self.w = self.add_weight(shape=(input_shape[1][-1] // self.downsampling_factor, input_shape[1][-1] // self.downsampling_factor),
-                                 initializer=self.init,
-                                 name='kernel',
-                                 regularizer=self.W_regularizer,
-                                 constraint=self.W_constraint)
-
-        # Call the parent class' build method
+        self.input_spec = InputSpec(shape=input_shape)
+    
+        self.w = self.add_weight(
+            shape=(input_shape[1], input_shape[2]),  # height × width
+            initializer=self.init,
+            name='kernel',
+            regularizer=self.W_regularizer,
+            constraint=self.W_constraint
+        )
+    
         super(EltWiseProduct, self).build(input_shape)
 
-    def call(self, inputs):
-        """
-        Perform the element-wise product.
-        """
-        # Unpack the inputs
-        x, y = inputs
-
-        # Compute the element-wise product
-        output = x * y
-
-        return output
-
+    def call(self, x):
+        # Expand dims to match input shape: (batch, H, W, 1)
+        w_expanded = tf.expand_dims(self.w, axis=-1)  # shape: (H, W, 1)
+        w_expanded = tf.expand_dims(w_expanded, axis=0)  # shape: (1, H, W, 1)
+    
+        # Multiply: (batch, H, W, 1) * (1, H, W, 1)
+        return x * w_expanded
+    
     def compute_output_shape(self, input_shape):
         """
         Compute the output shape: should be same as input shape.
         """
-        return input_shape[0]
+        return input_shape
 
     def get_config(self):
         """

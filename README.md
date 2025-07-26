@@ -71,9 +71,9 @@ Model weights will be saved during training and loaded for testing.
 * Ali Kargar — LinkedIn: , Email: , GitHub:
 * Arsalan
 * Amirhossein
-* Mahtab
-* Mahsa
-* Niloofar
+* Mahtab Dastranj 
+* Mahsa Khodayari
+* Niloofar Naghibi
 * Mohammad Hossein
 * Amitis Mirabedini — Email: mirabediniamitis@gmail.com
 
